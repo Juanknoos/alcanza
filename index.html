@@ -99,7 +99,7 @@ const GoogleSheetsService = {
     const c = SyncConfig.get(); let j;
     const r = await fetch(c.url, { method: 'POST', body: JSON.stringify({ token: c.token, action, state }) }); // texto plano: sin preflight CORS
     try { j = await r.json(); } catch { throw new Error('Respuesta inválida: revisa que el acceso de la implementación sea "Cualquier usuario"'); }
-    if (!j.ok) throw new Error(j.error || 'Error desconocido'); return j.state;
+    if (!j.ok) throw new Error(j.error === 'Clave incorrecta' ? 'La clave no coincide con la de Code.gs (revisa mayúsculas, espacios y que no sea la clave de ejemplo)' : (j.error || 'Error desconocido')); return j.state;
   },
   pull() { return this.call('load'); }, push(s) { return this.call('save', s); }
 };
@@ -276,8 +276,8 @@ function syncSection() {
   const c = SyncConfig.get(), hora = c && c.lastSync ? new Date(c.lastSync).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' }) : '';
   return `<div class="sec">${ic('cloud_sync')}Sincronización <em>${c ? 'Conectado' : 'Sin conectar'}</em></div><form class="card" data-form="sync">
     <div class="note">${ic('cloud')}Guarda tus datos en tu propia hoja de Google para ver lo mismo en el PC y en el celular.</div>
-    <div class="lbl">URL de la aplicación web</div><div class="field sm"><input name="url" value="${esc(c ? c.url : '')}" placeholder="https://script.google.com/macros/s/…/exec" required aria-label="URL"></div>
-    <div class="lbl">Clave</div><div class="field sm"><input name="token" type="password" value="${esc(c ? c.token : '')}" required aria-label="Clave"></div>
+    <div class="lbl">URL de la aplicación web</div><div class="field sm"><input name="url" value="${esc(c ? c.url : '')}" placeholder="https://script.google.com/macros/s/…/exec" required aria-label="URL" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false"></div>
+    <div class="lbl">Clave <span class="sub">(idéntica a la de Code.gs, con mayúsculas)</span></div><div class="field sm"><input name="token" type="text" value="${esc(c ? c.token : '')}" required aria-label="Clave" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false"></div>
     ${c ? `<p class="sub" style="margin:0 0 12px">${c.lastError ? '⚠️ ' + esc(c.lastError) : hora ? 'Última sincronización: ' + hora : 'Sincronizando…'}</p>` : ''}
     <button class="big-btn">${ic('sync')}${c ? 'Guardar y sincronizar' : 'Conectar y sincronizar'}</button>
     ${c ? `<button type="button" class="li danger" data-act="syncoff"><span class="ico">${ic('cloud_off')}</span><div><b>Desconectar</b><small style="color:var(--err)">Tus datos locales se conservan</small></div></button>` : ''}</form>`;
