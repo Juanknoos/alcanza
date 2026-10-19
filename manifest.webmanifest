@@ -1,0 +1,16 @@
+{
+  "name": "Alcanza",
+  "short_name": "Alcanza",
+  "description": "Finanzas personales: pagos, gastos y metas de ahorro",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "lang": "es",
+  "background_color": "#f7faf8",
+  "theme_color": "#f7faf8",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
