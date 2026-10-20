@@ -20,7 +20,9 @@ function ensureMonths(S) { // crea el pago del mes actual y del siguiente para c
     const m = new Date(t.getFullYear(), t.getMonth() + off, 1), key = ym(m);
     S.templates.filter(x => x.active && key >= x.startMonth).forEach(x => {
       if (S.payments.some(p => p.templateId === x.id && p.month === key)) return;
-      S.payments.push({ id: uid(), templateId: x.id, name: x.name, amount: x.amount, month: key, due: iso(clampDay(m.getFullYear(), m.getMonth(), x.day)), status: 'pending', paidAt: null });
+      const [sy, sm] = x.startMonth.split('-').map(Number), idx = (m.getFullYear() - sy) * 12 + (m.getMonth() + 1 - sm) + 1; // nº de cuota
+      if (x.installments > 0 && idx > x.installments) return;
+      S.payments.push({ id: uid(), templateId: x.id, name: x.name, amount: x.amount, month: key, due: iso(clampDay(m.getFullYear(), m.getMonth(), x.day)), status: 'pending', paidAt: null, inst: x.installments > 0 ? idx : 0, instOf: x.installments || 0 });
     });
   }
 }
@@ -42,3 +44,7 @@ function goalInfo(g) { // progreso, cuota semanal sugerida y ritmo ideal (línea
   const state = saved >= g.target ? 'done' : days < 0 ? 'late' : diff < -tol ? 'behind' : diff > tol ? 'ahead' : 'ok';
   return { saved, left, days, weeks, quota: left / weeks, pct: Math.min(100, saved / g.target * 100), idealPct: Math.min(100, ideal / g.target * 100), diff, state };
 }
+
+/* ===== CUOTAS ===== */
+const tplPaid = (S, x) => S.payments.filter(p => p.templateId === x.id && p.status === 'paid').length;
+const tplDone = (S, x) => x.installments > 0 && tplPaid(S, x) >= x.installments;

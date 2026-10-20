@@ -4,7 +4,7 @@ const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const ic = (n, c = '') => `<span class="material-symbols-outlined ${c}">${n}</span>`;
 const save = () => DataService.save(S);
-const toast = t => { const e = $('#toast'); e.textContent = t; e.classList.add('show'); clearTimeout(toast.t); toast.t = setTimeout(() => e.classList.remove('show'), 2400); };
+const toast = (t, ms = 2400) => { const e = $('#toast'); e.textContent = t; e.classList.add('show'); clearTimeout(toast.t); toast.t = setTimeout(() => e.classList.remove('show'), ms); };
 const TABS = [['pagos','Pagos','check_circle'],['gastos','Gastos','donut_large'],['metas','Metas','flag'],['proyeccion','Proyección','trending_up'],['libreta','Libreta','sticky_note_2'],['ajustes','Ajustes','tune']];
 
 let gp = 'mes', goff = 0, qa = null, openRow = null, collapsed = {};
@@ -22,9 +22,9 @@ function gItems(from, to) { const inr = d => d >= from && d <= to;
   const tx = S.transactions.filter(x => inr(x.date)).map(x => ({ kind: 'tx', id: x.id, date: x.date, type: x.type, amount: x.amount, cat: x.cat, note: x.note }));
   const pays = S.payments.filter(p => p.status === 'paid' && p.paidAt && inr(p.paidAt)).map(p => ({ kind: 'pay', id: p.id, date: p.paidAt, type: 'expense', amount: p.amount, cat: 'pagos', note: p.name }));
   return tx.concat(pays).sort((a, b) => b.date.localeCompare(a.date)); }
-const rowTx = i => { const c = catInfo(i.cat), inc = i.type === 'income';
-  return `<div class="mvr"><div class="ci" style="background:${c.color}">${ic(c.icon)}</div><div style="flex:1;min-width:0"><b>${esc(i.note || c.name)}</b><div class="sub">${esc(c.name)}${i.kind === 'pay' ? ' · pago' : ''}</div></div>
-  <b class="${inc ? 'pos' : 'neg'}">${inc ? '+' : '-'}${money(i.amount)}</b>${i.kind === 'tx' ? `<button class="soft" data-act="deltx" data-id="${i.id}" aria-label="Eliminar">${ic('delete')}</button>` : ''}</div>`; };
+const rowTx = i => { const c = catInfo(i.cat), inc = i.type === 'income', ed = i.kind === 'tx';
+  return `<div class="mvr" ${ed ? `data-act="edittx" data-id="${i.id}" style="cursor:pointer"` : ''}><div class="ci" style="background:${c.color}">${ic(c.icon)}</div><div style="flex:1;min-width:0"><b>${esc(i.note || c.name)}</b><div class="sub">${esc(c.name)}${i.kind === 'pay' ? ' · pago' : ''}</div></div>
+  <b class="${inc ? 'pos' : 'neg'}">${inc ? '+' : '-'}${money(i.amount)}</b>${ed ? ic('chevron_right') : ''}</div>`; };
 const VIEWS = {
   pagos() {
     const seg = `<div class="seg2 s1">${[['pend', 'Pendientes'], ['fijos', 'Fijos']].map(([k, t]) => `<button class="${k === pv ? 'on' : ''}" data-act="pvset" data-v="${k}">${t}</button>`).join('')}</div>`;
@@ -34,9 +34,9 @@ const VIEWS = {
     const g = { late: [], week: [], later: [] }; pend.forEach(p => { const n = daysTo(p.due); (n < 0 ? g.late : n <= 7 ? g.week : g.later).push(p); });
     const rw = p => { const [c, , t] = chip(p.due), late = c === 'late';
       return `<div class="li2"><div class="lr" data-act="rowtog" data-id="${p.id}"><div class="ico ${late ? 'err' : ''}">${ic(iconFor(p.name))}</div>
-        <div class="mid"><b class="n">${esc(p.name)}${p.templateId ? ' <span title="Pago fijo">' + ic('autorenew') + '</span>' : ''}</b><div class="sub"><span class="${tone(p.due)}">${late ? 'hace ' + (-daysTo(p.due)) + ' d' : t}</span> · ${dshort(p.due)}</div></div>
+        <div class="mid"><b class="n">${esc(p.name)}${p.instOf ? ' <small class="sub">' + p.inst + '/' + p.instOf + '</small>' : ''}${p.templateId ? ' <span title="Pago fijo">' + ic('autorenew') + '</span>' : ''}</b><div class="sub"><span class="${tone(p.due)}">${late ? 'hace ' + (-daysTo(p.due)) + ' d' : t}</span> · ${dshort(p.due)}</div></div>
         <b class="amt">${money(p.amount)}</b><button class="chk" data-act="pay" data-id="${p.id}" aria-label="Marcar ${esc(p.name)} como pagado">${ic('check')}</button></div>
-        ${openRow === p.id ? `<div class="rx">${p.templateId ? '<span class="sub">Pago fijo: edítalo o páusalo en la pestaña Fijos.</span>' : `<button class="soft" data-act="delpay" data-id="${p.id}">${ic('delete')} Eliminar</button>`}</div>` : ''}</div>`; };
+        ${openRow === p.id ? `<div class="rx"><button class="soft" data-act="editpay" data-id="${p.id}">${ic('edit')} Editar</button>${p.templateId ? '' : ` <button class="soft" data-act="delpay" data-id="${p.id}">${ic('delete')} Eliminar</button>`}</div>` : ''}</div>`; };
     const sec = (k, title, list, row) => { if (!list.length) return ''; const col = isCol(k, list.length);
       return `<button class="gh" data-act="coltog" data-k="${k}" data-n="${list.length}" aria-expanded="${!col}"><b>${title}</b><span class="sub">${list.length} · ${money(sum(list))}</span>${ic(col ? 'expand_more' : 'expand_less')}</button>${col ? '' : `<div class="card lst">${list.map(row).join('')}</div>`}`; };
     const prow = p => `<div class="li2"><div class="lr"><div class="ico ok">${ic('check_circle')}</div><div class="mid"><b class="n paid-n">${esc(p.name)}</b><div class="sub">Pagado el ${dshort(p.paidAt)}${p.templateId ? ' · fijo' : ''}</div></div><b class="amt">${money(p.amount)}</b>
@@ -100,12 +100,12 @@ const VIEWS = {
       <button class="big-btn" style="margin-top:6px" data-act="gnew">${ic('add')}Nueva meta</button>`;
   },
   fijos() {
-    const act = S.templates.filter(x => x.active), total = sum(act), mi = S.income.amount * 52 / 12, pct = mi > 0 ? Math.min(100, total / mi * 100) : 0;
-    return `<div class="card"><span class="sub">${ic('lock_clock')} Total mensual comprometido</span><div class="top"><div style="font-size:2rem;font-weight:700">${money(total)}<small class="sub"> al mes</small></div><span class="badge">${act.length} activos · ${S.templates.length - act.length} pausados</span></div>
+    const act = S.templates.filter(x => x.active && !tplDone(S, x)), total = sum(act), mi = S.income.amount * 52 / 12, pct = mi > 0 ? Math.min(100, total / mi * 100) : 0;
+    return `<div class="card"><span class="sub">${ic('lock_clock')} Total mensual comprometido</span><div class="top"><div style="font-size:2rem;font-weight:700">${money(total)}<small class="sub"> al mes</small></div><span class="badge">${act.length} activos</span></div>
       ${mi > 0 ? `<div class="bar" role="img" aria-label="${Math.round(pct)}% de tu ingreso mensual estimado"><i style="width:${pct}%"></i></div><div class="sub" style="margin-top:6px">${Math.round(pct)}% de tu ingreso mensual estimado</div>` : ''}</div>
       <div class="top" style="margin:20px 4px 10px"><b>Tus suscripciones y servicios</b><span class="sub">${S.templates.length} registros</span></div>
-      ${S.templates.map(x => `<div class="card fx" style="${x.active ? '' : 'opacity:.75'}"><div class="ico">${ic(iconFor(x.name))}</div><div><b class="n" style="font-size:1.1rem">${esc(x.name)}</b><span class="badge ${x.active ? '' : 'pause'}">${x.active ? 'Activo' : 'En pausa'}</span><div class="sub">${ic('event_repeat')} Día ${x.day} de cada mes</div></div><div class="amt">${money(x.amount)}<div class="sub">mensual</div></div>
-      <div class="acts">${x.active ? `<button data-act="tamount" data-id="${x.id}">${ic('edit')}Cambiar monto</button><button data-act="ttoggle" data-id="${x.id}">${ic('pause_circle')}Pausar</button>` : `<button style="color:var(--p)" data-act="ttoggle" data-id="${x.id}">${ic('play_circle')}Reanudar</button>`}<button class="x" data-act="tdel" data-id="${x.id}">${ic('delete')}Eliminar</button></div></div>`).join('') || '<div class="card dim sub">Aún no tienes pagos fijos. Añade el primero.</div>'}
+      ${S.templates.map(x => `<div class="card fx" style="${x.active ? '' : 'opacity:.75'}"><div class="ico">${ic(iconFor(x.name))}</div><div><b class="n" style="font-size:1.1rem">${esc(x.name)}</b><span class="badge ${x.active && !tplDone(S, x) ? '' : 'pause'}">${tplDone(S, x) ? 'Terminado' : x.active ? 'Activo' : 'En pausa'}</span><div class="sub">${ic('event_repeat')} Día ${x.day} de cada mes${x.installments > 0 ? ' · ' + tplPaid(S, x) + ' de ' + x.installments + ' cuotas pagadas' : ''}</div></div><div class="amt">${money(x.amount)}<div class="sub">mensual</div></div>
+      <div class="acts">${x.active ? `<button data-act="tedit" data-id="${x.id}">${ic('edit')}Editar</button><button data-act="ttoggle" data-id="${x.id}">${ic('pause_circle')}Pausar</button>` : `<button style="color:var(--p)" data-act="ttoggle" data-id="${x.id}">${ic('play_circle')}Reanudar</button>`}<button class="x" data-act="tdel" data-id="${x.id}">${ic('delete')}Eliminar</button></div></div>`).join('') || '<div class="card dim sub">Aún no tienes pagos fijos. Añade el primero.</div>'}
       <button class="big-btn" style="margin:14px 0" data-act="addf">${ic('add')}Añadir fijo</button>`;
   },
   ajustes() {
@@ -117,7 +117,7 @@ const VIEWS = {
       <button class="big-btn">${ic('save')}Guardar cambios</button></form>
       <div class="sec">${ic('account_balance_wallet')}Saldo real actual</div><form class="card" data-form="balance"><div class="lbl">Tu saldo en cuenta ahora mismo</div><div class="field">$<input name="b" type="number" step="any" inputmode="decimal" value="${S.balance}" aria-label="Saldo real"></div>
       <p class="sub" style="margin:0 0 12px">Actualízalo cuando no coincida con tu dinero real.</p><button class="big-btn dark">${ic('sync')}Actualizar saldo</button></form>
-      ${catSection()}${syncSection()}<div class="sec">${ic('shield')}Copia de seguridad y privacidad</div><div class="card"><p class="sub" style="margin:0">Tus datos viven solo en este dispositivo. Puedes exportarlos o restaurarlos cuando quieras.</p>
+      ${catSection()}${syncSection()}${remSection()}<div class="sec">${ic('shield')}Copia de seguridad y privacidad</div><div class="card"><p class="sub" style="margin:0">Tus datos viven solo en este dispositivo. Puedes exportarlos o restaurarlos cuando quieras.</p>
       <button class="li" data-act="export"><span class="ico">${ic('download')}</span><div><b>Exportar datos</b><small>Descarga JSON local</small></div>${ic('chevron_right')}</button>
       <label class="li" style="cursor:pointer"><span class="ico">${ic('upload')}</span><div><b>Importar respaldo</b><small>Restaurar historial previo</small></div>${ic('chevron_right')}<input type="file" id="imp" accept=".json" hidden></label>
       <button class="li danger" data-act="reset"><span class="ico">${ic('delete_forever')}</span><div><b>Borrar todos los datos</b><small style="color:var(--err)">Reiniciar base local de Alcanza</small></div>${ic('warning')}</button></div>
@@ -143,6 +143,17 @@ function catSection() {
     <form data-form="newcat"><div class="lbl" style="margin-top:14px">Nueva categoría</div><div class="field sm"><input name="name" placeholder="Ej: Mascotas" required maxlength="20" aria-label="Nombre"></div>
     <div style="display:flex;gap:10px;align-items:center"><select name="icon" aria-label="Icono">${ICONS.map(([k, n]) => `<option value="${k}">${n}</option>`).join('')}</select><input type="color" name="color" value="#1c7ed6" aria-label="Color" style="width:56px;height:46px;border:0;padding:0;background:none"></div>
     <button class="big-btn" style="margin-top:12px">${ic('add')}Agregar categoría</button></form></div>`;
+}
+function remSection() {
+  const c = SyncConfig.get(), r = S.reminders;
+  if (!c) return `<div class="sec">${ic('notifications')}Recordatorios</div><div class="card"><p class="sub" style="margin:0">Conecta la sincronización con Google para recibir avisos de tus pagos en el calendario de tu iPhone.</p></div>`;
+  return `<div class="sec">${ic('notifications')}Recordatorios <em>${r.on ? 'Activos' : 'Apagados'}</em></div><form class="card" data-form="rem" style="display:grid;gap:10px">
+    <label class="opt"><input type="checkbox" name="on" ${r.on ? 'checked' : ''}><span>Avisarme de mis pagos pendientes<small>Se crean en tu Google Calendar</small></span></label>
+    <div class="lbl">Hora del aviso</div><div class="field sm" style="margin:0"><input type="time" name="time" value="${r.time}" required aria-label="Hora del aviso"></div>
+    <label class="opt"><input type="checkbox" name="before" ${r.before ? 'checked' : ''}><span>Un día antes</span></label><label class="opt"><input type="checkbox" name="same" ${r.same ? 'checked' : ''}><span>El mismo día</span></label>
+    ${c.info ? `<p class="sub" style="margin:0">${esc(c.info)}</p>` : ''}
+    <button class="big-btn">${ic('save')}Guardar recordatorios</button>
+    <button type="button" class="li" data-act="remtest"><span class="ico">${ic('notification_important')}</span><div><b>Enviar aviso de prueba</b><small>Debe llegar a tu iPhone en unos 3 minutos</small></div></button></form>`;
 }
 function syncSection() {
   const c = SyncConfig.get(), hora = c && c.lastSync ? new Date(c.lastSync).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' }) : '';
@@ -175,11 +186,13 @@ function render() {
 function openAdd(mode, fijo) {
   const pago = mode === 'pago', inc = mode === 'ingreso';
   if (!pago) qa = { type: inc ? 'income' : 'expense', expr: '', cat: (S.categories[0] || {}).id || 'otros' };
-  const seg = fijo ? '' : `<div class="seg2" style="margin:0 0 12px">${[['gasto', 'Gasto'], ['ingreso', 'Ingreso'], ['pago', 'Pago por vencer']].map(([m, t]) => `<button type="button" class="${m === mode ? 'on' : ''}" data-act="addm" data-m="${m}">${t}</button>`).join('')}</div>`;
+  const seg = fijo ? '' : `<div class="seg2" style="margin:0 0 12px">${[['gasto', 'Gasto'], ['ingreso', 'Ingreso'], ['pago', 'Por vencer']].map(([m, t]) => `<button type="button" class="${m === mode ? 'on' : ''}" data-act="addm" data-m="${m}">${t}</button>`).join('')}</div>`;
   const body = pago ? `<p class="sub" style="margin:0 0 10px">${fijo ? 'Se creará solo cada mes.' : 'Para algo que aún no pagas y vence en una fecha.'}</p>
     <form data-form="newpay"><label>Nombre<input name="name" required maxlength="40" autofocus></label><label>Monto<input name="amount" type="number" min="1" step="any" inputmode="decimal" required></label>
     <label>${fijo ? 'Primer vencimiento' : 'Fecha de vencimiento'}<input name="due" type="date" value="${iso(today())}" required></label>
-    ${fijo ? '<input type="hidden" name="repeat" value="on">' : '<label class="chk"><input type="checkbox" name="repeat"> Se repite cada mes (pago fijo)</label>'}<button class="big-btn">${ic('check')}Guardar</button></form>`
+    ${fijo ? '<input type="hidden" name="repeat" value="on">' : '<label class="opt"><input type="checkbox" name="repeat"><span>Se repite cada mes<small>Pago fijo: aparece solo cada mes</small></span></label>'}
+    <label id="instbox" ${fijo ? '' : 'hidden'}>Número de cuotas <span class="sub">(opcional; vacío = sin fin)</span><input name="inst" type="number" min="2" max="120" inputmode="numeric" placeholder="Ej: 12"></label>
+    <button class="big-btn">${ic('check')}Guardar</button></form>`
   : `<div class="qd" id="qdisp">0</div><div class="qs" id="qres"></div>
     ${inc ? '' : `<div class="cg" style="margin-top:10px">${S.categories.map(c => `<button type="button" class="qc ${c.id === qa.cat ? 'on' : ''}" data-act="qcat" data-id="${c.id}"><span class="ci" style="background:${c.color}">${ic(c.icon)}</span>${esc(c.name)}</button>`).join('')}</div>`}
     <div class="kp">${['7','8','9','/','4','5','6','*','1','2','3','-','.','0','bk','+'].map(k => `<button type="button" class="${'+-*/'.includes(k) ? 'op' : ''}" data-act="key" data-k="${k}" aria-label="${k === 'bk' ? 'Borrar' : k}">${k === 'bk' ? ic('backspace') : k === '/' ? '÷' : k === '*' ? '×' : k === '-' ? '−' : k === '.' ? ',' : k}</button>`).join('')}</div>
@@ -187,6 +200,25 @@ function openAdd(mode, fijo) {
     <button class="big-btn" style="margin-top:12px" data-act="qsave">${ic('check')}Guardar</button>`;
   $('#sheet').innerHTML = `<div class="panel" role="dialog" aria-label="Registrar"><div class="top" style="margin-bottom:10px"><h2>${fijo ? 'Añadir pago fijo' : 'Registrar'}</h2><button class="soft" data-act="close" aria-label="Cerrar">${ic('close')}</button></div>${seg}${body}</div>`;
   $('#sheet').classList.add('open'); if (!pago) updQA();
+}
+function openEdit(kind, id) {
+  let title, body;
+  if (kind === 'tx') { const x = S.transactions.find(t => t.id === id), inc = x.type === 'income'; title = inc ? 'Editar ingreso' : 'Editar gasto';
+    body = `<form data-form="edittx" data-id="${id}"><label>Monto<input name="amount" type="number" min="1" step="any" inputmode="decimal" value="${x.amount}" required></label>
+      ${inc ? '' : `<label>Categoría<select name="cat">${S.categories.map(c => `<option value="${c.id}" ${c.id === x.cat ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select></label>`}
+      <label>Fecha<input name="date" type="date" value="${x.date}" required></label><label>Nota<input name="note" maxlength="40" value="${esc(x.note || '')}"></label>
+      <button class="big-btn">${ic('check')}Guardar cambios</button>
+      <button type="button" class="li danger" data-act="deltx" data-id="${id}"><span class="ico">${ic('delete')}</span><div><b>Eliminar</b><small style="color:var(--err)">El saldo se ajustará</small></div></button></form>`;
+  } else if (kind === 'pay') { const p = byId(id); title = 'Editar pago';
+    body = `<p class="sub" style="margin:0 0 10px">${p.templateId ? 'Solo cambia este pago. Para cambiar todos los meses, usa Fijos → Editar.' : 'Cambia los datos de este pago.'}</p>
+      <form data-form="editpay" data-id="${id}"><label>Nombre<input name="name" required maxlength="40" value="${esc(p.name)}"></label><label>Monto<input name="amount" type="number" min="1" step="any" inputmode="decimal" value="${p.amount}" required></label>
+      <label>Fecha de vencimiento<input name="due" type="date" value="${p.due}" required></label><button class="big-btn">${ic('check')}Guardar cambios</button></form>`;
+  } else { const x = tpl(id); title = 'Editar pago fijo';
+    body = `<p class="sub" style="margin:0 0 10px">Los pagos pendientes de este fijo se actualizan; los ya pagados no cambian.</p>
+      <form data-form="edittpl" data-id="${id}"><label>Nombre<input name="name" required maxlength="40" value="${esc(x.name)}"></label><label>Monto mensual<input name="amount" type="number" min="1" step="any" inputmode="decimal" value="${x.amount}" required></label>
+      <label>Día del mes<input name="day" type="number" min="1" max="31" inputmode="numeric" value="${x.day}" required></label><button class="big-btn">${ic('check')}Guardar cambios</button></form>`; }
+  $('#sheet').innerHTML = `<div class="panel" role="dialog" aria-label="${title}"><div class="top" style="margin-bottom:10px"><h2>${title}</h2><button class="soft" data-act="close" aria-label="Cerrar">${ic('close')}</button></div>${body}</div>`;
+  $('#sheet').classList.add('open');
 }
 function updQA() { const e = qa.expr, v = evalExpr(e);
   $('#qdisp').textContent = e.replace(/\*/g, '×').replace(/\//g, '÷').replace(/-/g, '−') || '0'; $('#qres').textContent = e && isFinite(v) ? '= ' + money(v) : ''; }
@@ -211,7 +243,7 @@ const actions = {
   income: () => { S.balance += S.income.amount; S.transactions.push({ id: uid(), type: 'income', amount: S.income.amount, cat: 'ingreso', date: iso(today()), note: 'Ingreso semanal' }); done('Ingreso sumado al saldo'); },
   close: closeSheet, hidesim: () => { sim = null; render(); },
   wd: d => { S.income.weekday = +d.i; const f = document.querySelector('[data-form=income] [name=amount]'); S.income.amount = parseFloat(f.value) || S.income.amount; render(); },
-  tamount: d => { const x = tpl(d.id), v = parseFloat(prompt('Nuevo monto para ' + x.name, x.amount)); if (!(v > 0)) return; x.amount = v; S.payments.filter(p => p.templateId === x.id && p.status === 'pending').forEach(p => p.amount = v); done('Monto actualizado'); },
+  tedit: d => openEdit('tpl', d.id), editpay: d => openEdit('pay', d.id), edittx: d => openEdit('tx', d.id),
   ttoggle: d => { const x = tpl(d.id); x.active = !x.active; if (x.active) ensureMonths(S); done(); },
   tdel: d => { const x = tpl(d.id); if (!confirm(`¿Eliminar "${x.name}" y sus pagos pendientes? Los ya pagados se conservan.`)) return; S.templates = S.templates.filter(t => t !== x); S.payments = S.payments.filter(p => !(p.templateId === x.id && p.status === 'pending')); done(); },
   export: () => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(S, null, 2)], { type: 'application/json' })); a.download = 'alcanza-' + iso(today()) + '.json'; a.click(); },
@@ -228,7 +260,7 @@ const actions = {
     S.transactions.push({ id: uid(), type: qa.type, amount, cat: inc ? 'ingreso' : qa.cat, date: $('#qdate').value || iso(today()), note: $('#qnote').value.trim() });
     S.balance += inc ? amount : -amount; closeSheet(); done(inc ? 'Ingreso registrado' : 'Gasto registrado'); },
   deltx: d => { const x = S.transactions.find(t => t.id === d.id); if (!confirm('¿Eliminar este movimiento? El saldo se ajustará.')) return;
-    S.balance += x.type === 'income' ? -x.amount : x.amount; S.transactions = S.transactions.filter(t => t !== x); done(); },
+    S.balance += x.type === 'income' ? -x.amount : x.amount; S.transactions = S.transactions.filter(t => t !== x); closeSheet(); done(); },
   gper: d => { gp = d.p; goff = 0; render(); }, gnav: d => { goff = Math.min(0, goff + +d.n); render(); },
   catren: d => { const c = S.categories.find(x => x.id === d.id), n = prompt('Nuevo nombre', c.name); if (n && n.trim()) { c.name = n.trim(); done(); } },
   catdel: d => { const c = S.categories.find(x => x.id === d.id); if (confirm(`¿Eliminar la categoría "${c.name}"? Sus movimientos pasarán a "Otros".`)) { S.categories = S.categories.filter(x => x !== c); done(); } },
@@ -243,6 +275,7 @@ const actions = {
     else if (n.amount > 0 && n.kind === 'yo' && confirm(`¿Descontar ${money(n.amount)} de tu saldo?`)) { S.balance -= n.amount; S.transactions.push({ id: uid(), type: 'expense', amount: n.amount, cat: (S.categories.find(c => c.name === 'Otros') || S.categories[0] || {}).id || 'otros', date: iso(today()), note: 'Pago: ' + n.who }); }
     done('Listo'); },
   ndel: d => { if (confirm('¿Eliminar esta anotación?')) { S.notes = S.notes.filter(x => x.id !== d.id); done(); } },
+  remtest: async () => { try { toast('Creando aviso de prueba…'); toast(await GoogleSheetsService.test(Intl.DateTimeFormat().resolvedOptions().timeZone), 7000); } catch (e) { toast('No se pudo: ' + e.message, 6000); } },
   syncoff: () => { SyncConfig.clear(); render(); toast('Desconectado'); },
   reset: () => { if (confirm('Se borrará todo' + (SyncConfig.get() ? ', también en tu hoja de Google' : '') + '. ¿Continuar?')) { S = DEFAULT_STATE(); done('Datos borrados'); } }
 };
@@ -255,7 +288,7 @@ document.addEventListener('change', async e => { if (e.target.id !== 'imp') retu
 document.addEventListener('submit', e => {
   e.preventDefault(); const v = Object.fromEntries(new FormData(e.target)), k = e.target.dataset.form;
   if (k === 'newpay') { const amount = parseFloat(v.amount), d = parse(v.due), name = v.name.trim(); closeSheet();
-    if (v.repeat) { S.templates.push({ id: uid(), name, amount, day: d.getDate(), startMonth: ym(d), active: true }); ensureMonths(S); }
+    if (v.repeat) { S.templates.push({ id: uid(), name, amount, day: d.getDate(), startMonth: ym(d), active: true, installments: parseInt(v.inst) > 0 ? parseInt(v.inst) : 0 }); ensureMonths(S); }
     else S.payments.push({ id: uid(), templateId: null, name, amount, month: ym(d), due: v.due, status: 'pending', paidAt: null });
     done('Pago agregado'); }
   else if (k === 'income') { S.income.amount = parseFloat(v.amount) || 0; done('Ingreso guardado'); }
@@ -266,10 +299,19 @@ document.addEventListener('submit', e => {
     g.contribs.push({ id: uid(), type: inn ? 'in' : 'out', amount: a, date: iso(today()) }); S.balance += inn ? -a : a; closeSheet();
     done(inn && goalSaved(g) >= g.target ? '🎉 ¡Meta lograda!' : inn ? 'Dinero apartado' : 'Dinero retirado'); }
   else if (k === 'note') { S.notes.push({ id: uid(), kind: v.kind, who: v.who.trim(), amount: parseFloat(v.amount) || 0, note: (v.note || '').trim(), date: iso(today()), done: false }); done('Anotado'); }
+  else if (k === 'edittx') { const x = S.transactions.find(t => t.id === e.target.dataset.id), n = parseFloat(v.amount); if (!(n > 0)) return toast('Monto no válido');
+    S.balance += x.type === 'income' ? n - x.amount : x.amount - n; x.amount = n; x.date = v.date; x.note = (v.note || '').trim(); if (x.type === 'expense') x.cat = v.cat; closeSheet(); done('Movimiento actualizado'); }
+  else if (k === 'editpay') { const p = byId(e.target.dataset.id); p.name = v.name.trim(); p.amount = parseFloat(v.amount); p.due = v.due; if (!p.templateId) p.month = v.due.slice(0, 7); closeSheet(); done('Pago actualizado'); }
+  else if (k === 'edittpl') { const x = tpl(e.target.dataset.id), n = parseFloat(v.amount), day = Math.min(31, Math.max(1, parseInt(v.day) || x.day));
+    x.name = v.name.trim(); x.amount = n; x.day = day;
+    S.payments.filter(p => p.templateId === x.id && p.status === 'pending').forEach(p => { const [yy, mm] = p.month.split('-').map(Number); p.name = x.name; p.amount = n; p.due = iso(clampDay(yy, mm - 1, day)); });
+    closeSheet(); done('Pago fijo actualizado'); }
+  else if (k === 'rem') { S.reminders = { ...S.reminders, on: v.on === 'on', time: v.time, before: v.before === 'on', same: v.same === 'on' }; done('Recordatorios guardados'); }
   else if (k === 'sync') connect(v.url.trim(), v.token.trim());
   else if (k === 'balance') { S.balance = parseFloat(v.b) || 0; done('Saldo actualizado'); }
   else if (k === 'sim') { sim = { amount: parseFloat(v.amount), date: v.date < iso(today()) ? iso(today()) : v.date }; render(); }
 });
+document.addEventListener('change', e => { if (e.target.name === 'repeat' && e.target.type === 'checkbox') { const b = $('#instbox'); if (b) b.hidden = !e.target.checked; } });
 window.addEventListener('hashchange', () => { const h = location.hash.slice(1); if (h === 'fijos') { pv = 'fijos'; tab = 'pagos'; } else tab = TABS.some(t => t[0] === h) ? h : 'pagos'; scrollTo(0, 0); render(); });
 matchMedia('(min-width:1100px)').addEventListener('change', () => { if (S) render(); });
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSheet(); });
