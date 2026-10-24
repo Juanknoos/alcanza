@@ -80,3 +80,6 @@ select{font:inherit;padding:12px 14px;border:0;border-radius:99px;background:var
 .opt,.panel .opt{display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--low);border-radius:16px;font-weight:600;font-size:.95rem;cursor:pointer;line-height:1.25}
 .opt input{width:22px;height:22px;flex:none;margin:0;accent-color:var(--pc)}.opt small{display:block;color:var(--out);font-weight:400;font-size:.8rem;margin-top:2px}
 .panel .seg2 button{font-size:.85rem;padding:9px 4px;white-space:nowrap}
+.wk{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-top:12px}
+.wd{display:grid;justify-items:center;gap:1px;padding:8px 0;border-radius:14px;background:var(--low);color:var(--var);border:2px solid transparent}.wd small{font-size:.7rem;font-weight:700}.wd b{font-size:1rem}
+.wd.on{background:var(--pc);color:#fff}.wd.today{border-color:var(--ink)}

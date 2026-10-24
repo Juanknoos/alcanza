@@ -29,7 +29,7 @@ const VIEWS = {
   pagos() {
     const seg = `<div class="seg2 s1">${[['pend', 'Pendientes'], ['fijos', 'Fijos']].map(([k, t]) => `<button class="${k === pv ? 'on' : ''}" data-act="pvset" data-v="${k}">${t}</button>`).join('')}</div>`;
     if (pv === 'fijos') return seg + VIEWS.fijos();
-    const pend = pending(), ni = S.income.amount > 0 ? nextIncome() : null, due = ni ? pend.filter(p => p.due < iso(ni)) : pend, avail = S.balance - sum(due);
+    const pend = pending(), ni = incomeOn(S) ? nextIncome() : null, due = ni ? pend.filter(p => p.due < iso(ni)) : pend, avail = S.balance - sum(due);
     const paid = S.payments.filter(p => p.status === 'paid' && p.month === ym(today())).sort((a, b) => b.paidAt.localeCompare(a.paidAt));
     const g = { late: [], week: [], later: [] }; pend.forEach(p => { const n = daysTo(p.due); (n < 0 ? g.late : n <= 7 ? g.week : g.later).push(p); });
     const rw = p => { const [c, , t] = chip(p.due), late = c === 'late';
@@ -46,7 +46,8 @@ const VIEWS = {
         <div class="top" style="margin-top:10px"><span class="sub">Cuota de la semana: <b>${money(i.quota)}</b></span><button class="go" style="padding:8px 16px" data-act="gap" data-id="${x.id}">${ic('savings')}Apartar</button></div></div>`; })();
     return seg + `<div class="hero"><div class="top"><p>Disponible hasta tu próximo cobro</p><span class="pill ${avail < 0 ? 'bad' : ''}">${avail < 0 ? 'Déficit' : 'Al día'}</span></div>
       <div class="big ${avail < 0 ? 'neg' : ''}">${money(avail)}</div><p>Saldo <b>${money(S.balance)}</b>, menos <b class="warn">${money(sum(due))}</b> por pagar${ni ? ' antes del ' + dlabel(iso(ni)).toLowerCase() : ''}</p>
-      ${S.income.amount > 0 ? `<button class="btn-w" data-act="income">${ic('add_circle')}Recibí mi ingreso (${money(S.income.amount)})</button>` : `<button class="btn-w" data-go="ajustes">${ic('tune')}Configura tu ingreso semanal</button>`}</div>
+      ${incomeBtn()}</div>
+      ${daysCard()}
       ${gm}
       ${pend.length ? sec('late', '⚠️ Vencidos', g.late, rw) + sec('week', 'Próximos 7 días', g.week, rw) + sec('later', 'Más adelante', g.later, rw) : '<div class="card dim sub" style="margin-top:16px">No tienes pagos pendientes. ¡Todo al día!</div>'}
       ${paid.length ? sec('paid', 'Pagados este mes', paid, prow) : ''}`;
@@ -56,7 +57,7 @@ const VIEWS = {
     const push = (d, x) => (ev[d] = ev[d] || []).push(x);
     pend.forEach(p => push(p.due < iso(t) ? iso(t) : p.due, { t: p.name, v: -p.amount, k: p.templateId ? 'Gasto fijo' : 'Pago único' }));
     const horizon = Math.min(70, Math.max(35, ...pend.map(p => daysTo(p.due))));
-    if (S.income.amount > 0) for (let i = 1; i <= horizon; i++) { const d = add(t, i); if (d.getDay() === S.income.weekday) push(iso(d), { t: 'Ingreso semanal', v: S.income.amount, inc: true }); }
+    if (incomeOn(S)) for (let i = 1; i <= horizon; i++) { const d = add(t, i); if (d.getDay() === S.income.weekday) push(iso(d), { t: isDaily(S) ? 'Pago de la semana' : 'Ingreso semanal', v: incomeAt(S, d), inc: true }); }
     if (sim) push(sim.date, { t: 'Pago simulado', v: -sim.amount, sim: true });
     const cards = Object.keys(ev).sort().map(d => { const before = bal; ev[d].forEach(x => bal += x.v); min = Math.min(min, bal);
       const neg = bal < 0, hasInc = ev[d].some(x => x.inc), hasSim = ev[d].some(x => x.sim);
@@ -100,7 +101,7 @@ const VIEWS = {
       <button class="big-btn" style="margin-top:6px" data-act="gnew">${ic('add')}Nueva meta</button>`;
   },
   fijos() {
-    const act = S.templates.filter(x => x.active && !tplDone(S, x)), total = sum(act), mi = S.income.amount * 52 / 12, pct = mi > 0 ? Math.min(100, total / mi * 100) : 0;
+    const act = S.templates.filter(x => x.active && !tplDone(S, x)), total = sum(act), mi = weeklyIncome(S) * 52 / 12, pct = mi > 0 ? Math.min(100, total / mi * 100) : 0;
     return `<div class="card"><span class="sub">${ic('lock_clock')} Total mensual comprometido</span><div class="top"><div style="font-size:2rem;font-weight:700">${money(total)}<small class="sub"> al mes</small></div><span class="badge">${act.length} activos</span></div>
       ${mi > 0 ? `<div class="bar" role="img" aria-label="${Math.round(pct)}% de tu ingreso mensual estimado"><i style="width:${pct}%"></i></div><div class="sub" style="margin-top:6px">${Math.round(pct)}% de tu ingreso mensual estimado</div>` : ''}</div>
       <div class="top" style="margin:20px 4px 10px"><b>Tus suscripciones y servicios</b><span class="sub">${S.templates.length} registros</span></div>
@@ -110,8 +111,13 @@ const VIEWS = {
   },
   ajustes() {
     const order = [[1,'L'],[2,'M'],[3,'M'],[4,'J'],[5,'V'],[6,'S'],[0,'D']];
+    const d = isDaily(S);
     return `<div class="sec">${ic('payments')}Ingreso semanal <em>Activo</em></div><form class="card" data-form="income">
-      <div class="lbl">Monto regular esperado</div><div class="field">$<input name="amount" type="number" min="0" step="any" inputmode="decimal" value="${S.income.amount || ''}" placeholder="0" aria-label="Monto de ingreso"></div>
+      <div class="seg2 s1">${[['fixed', 'Monto fijo'], ['daily', 'Por día trabajado']].map(([m, t]) => `<button type="button" class="${(d ? 'daily' : 'fixed') === m ? 'on' : ''}" data-act="incmode" data-m="${m}">${t}</button>`).join('')}</div>
+      ${d ? `<div class="lbl">Cuánto te pagan por día</div><div class="field">$<input name="daily" type="number" min="0" step="any" inputmode="decimal" value="${S.income.daily || ''}" placeholder="0" aria-label="Pago por día"></div>
+      <div class="lbl">Días que trabajas normalmente por semana</div><div class="field sm"><input name="usual" type="number" min="1" max="7" inputmode="numeric" value="${S.income.usual || 6}" aria-label="Días habituales"></div>
+      <p class="sub" style="margin:-4px 0 14px">Se usa para la proyección. Los días reales los marcas en Pagos.</p>`
+      : `<div class="lbl">Monto regular esperado</div><div class="field">$<input name="amount" type="number" min="0" step="any" inputmode="decimal" value="${S.income.amount || ''}" placeholder="0" aria-label="Monto de ingreso"></div>`}
       <div class="top"><span class="lbl">Día habitual de cobro</span><b class="sub" style="color:var(--p)">${cap(DAYS[S.income.weekday])}</b></div>
       <div class="seg" style="margin:10px 0 18px">${order.map(([i, l]) => `<button type="button" class="${i === S.income.weekday ? 'on' : ''}" data-act="wd" data-i="${i}" aria-label="${DAYS[i]}">${l}</button>`).join('')}</div>
       <button class="big-btn">${ic('save')}Guardar cambios</button></form>
@@ -155,6 +161,20 @@ function remSection() {
     <button class="big-btn">${ic('save')}Guardar recordatorios</button>
     <button type="button" class="li" data-act="remtest"><span class="ico">${ic('notification_important')}</span><div><b>Enviar aviso de prueba</b><small>Debe llegar a tu iPhone en unos 3 minutos</small></div></button></form>`;
 }
+function incomeBtn() {
+  const c = claimable(S);
+  if (c) return `<button class="btn-w" data-act="income">${ic('add_circle')}Recibí mi pago (${c.days} ${c.days === 1 ? 'día' : 'días'} · ${money(c.amount)})</button>`;
+  if (!incomeOn(S)) return `<button class="btn-w" data-go="ajustes">${ic('tune')}Configura tu ingreso</button>`;
+  return isDaily(S) ? '' : `<button class="btn-w" data-act="income">${ic('add_circle')}Recibí mi ingreso (${money(S.income.amount)})</button>`;
+}
+function daysCard() {
+  if (!isDaily(S) || !(S.income.daily > 0)) return '';
+  const t = today(); let e = payEnd(S, t); if (iso(e) <= (S.income.lastPaid || '')) e = payEnd(S, add(t, 1));
+  const n = workedIn(S, e);
+  return `<div class="card"><div class="top"><b>Días trabajados</b><span class="sub">pago el ${dlabel(iso(e)).toLowerCase()}</span></div>
+    <div class="wk">${periodDays(e).map(d => `<button class="wd ${S.worked[iso(d)] ? 'on' : ''} ${iso(d) === iso(t) ? 'today' : ''}" data-act="work" data-d="${iso(d)}" aria-pressed="${!!S.worked[iso(d)]}" aria-label="${DAYS[d.getDay()]} ${d.getDate()}"><small>${DAYS[d.getDay()][0].toUpperCase()}</small><b>${d.getDate()}</b></button>`).join('')}</div>
+    <div class="top" style="margin-top:12px"><span class="sub">${n} ${n === 1 ? 'día' : 'días'} × ${money(S.income.daily)}</span><b>${money(n * S.income.daily)}</b></div></div>`;
+}
 function syncSection() {
   const c = SyncConfig.get(), hora = c && c.lastSync ? new Date(c.lastSync).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' }) : '';
   return `<div class="sec">${ic('cloud_sync')}Sincronización <em>${c ? 'Conectado' : 'Sin conectar'}</em></div><form class="card" data-form="sync">
@@ -169,7 +189,7 @@ async function connect(url, token) {
   if (!/^https:\/\/script\.google\.com\/.+\/exec$/.test(url)) return toast('La URL debe terminar en /exec');
   SyncConfig.set({ url, token }); toast('Conectando…');
   try {
-    const r = await GoogleSheetsService.pull(), hasLocal = S.payments.length || S.templates.length || S.balance || S.income.amount;
+    const r = await GoogleSheetsService.pull(), hasLocal = S.payments.length || S.templates.length || S.balance || S.income.amount || S.income.daily;
     if (r && (r.payments || r.updatedAt) && (!hasLocal || confirm('Ya hay datos en tu hoja de Google.\n\nAceptar: usar los de la hoja (reemplaza los de este dispositivo).\nCancelar: reemplazar la hoja con los de este dispositivo.'))) S = { ...DEFAULT_STATE(), ...r };
     ensureMonths(S); await done('Sincronización conectada');
   } catch (e) { SyncConfig.clear(); toast('No se pudo conectar: ' + e.message); render(); }
@@ -240,9 +260,18 @@ const actions = {
   pay: d => { const p = byId(d.id); p.status = 'paid'; p.paidAt = iso(today()); S.balance -= p.amount; done('Pago registrado'); },
   undo: d => { const p = byId(d.id); p.status = 'pending'; p.paidAt = null; S.balance += p.amount; done('Pago deshecho'); },
   delpay: d => { if (confirm('¿Eliminar este pago?')) { S.payments = S.payments.filter(p => p.id !== d.id); done(); } },
-  income: () => { S.balance += S.income.amount; S.transactions.push({ id: uid(), type: 'income', amount: S.income.amount, cat: 'ingreso', date: iso(today()), note: 'Ingreso semanal' }); done('Ingreso sumado al saldo'); },
+  income: () => { const c = claimable(S);
+    if (c) { S.balance += c.amount; S.transactions.push({ id: uid(), type: 'income', amount: c.amount, cat: 'ingreso', date: iso(today()), note: `Pago semana (${c.days} ${c.days === 1 ? 'día' : 'días'})` }); S.income.lastPaid = iso(c.end); done('Pago sumado al saldo'); return; }
+    if (isDaily(S)) return toast('Aún no hay días marcados para cobrar');
+    S.balance += S.income.amount; S.transactions.push({ id: uid(), type: 'income', amount: S.income.amount, cat: 'ingreso', date: iso(today()), note: 'Ingreso semanal' }); done('Ingreso sumado al saldo'); },
+  work: d => { if (S.worked[d.d]) delete S.worked[d.d]; else S.worked[d.d] = true; done(); },
+  incmode: d => { S.income.mode = d.m; done(); },
   close: closeSheet, hidesim: () => { sim = null; render(); },
-  wd: d => { S.income.weekday = +d.i; const f = document.querySelector('[data-form=income] [name=amount]'); S.income.amount = parseFloat(f.value) || S.income.amount; render(); },
+  wd: d => { // conserva lo que estaba escrito en el formulario antes de redibujarlo
+    const q = n => document.querySelector(`[data-form=income] [name=${n}]`);
+    if (isDaily(S)) { if (q('daily')) S.income.daily = parseFloat(q('daily').value) || 0; if (q('usual')) S.income.usual = Math.min(7, Math.max(1, parseInt(q('usual').value) || 6)); }
+    else if (q('amount')) S.income.amount = parseFloat(q('amount').value) || 0;
+    S.income.weekday = +d.i; done(); },
   tedit: d => openEdit('tpl', d.id), editpay: d => openEdit('pay', d.id), edittx: d => openEdit('tx', d.id),
   ttoggle: d => { const x = tpl(d.id); x.active = !x.active; if (x.active) ensureMonths(S); done(); },
   tdel: d => { const x = tpl(d.id); if (!confirm(`¿Eliminar "${x.name}" y sus pagos pendientes? Los ya pagados se conservan.`)) return; S.templates = S.templates.filter(t => t !== x); S.payments = S.payments.filter(p => !(p.templateId === x.id && p.status === 'pending')); done(); },
@@ -291,7 +320,7 @@ document.addEventListener('submit', e => {
     if (v.repeat) { S.templates.push({ id: uid(), name, amount, day: d.getDate(), startMonth: ym(d), active: true, installments: parseInt(v.inst) > 0 ? parseInt(v.inst) : 0 }); ensureMonths(S); }
     else S.payments.push({ id: uid(), templateId: null, name, amount, month: ym(d), due: v.due, status: 'pending', paidAt: null });
     done('Pago agregado'); }
-  else if (k === 'income') { S.income.amount = parseFloat(v.amount) || 0; done('Ingreso guardado'); }
+  else if (k === 'income') { if (isDaily(S)) { S.income.daily = parseFloat(v.daily) || 0; S.income.usual = Math.min(7, Math.max(1, parseInt(v.usual) || 6)); } else S.income.amount = parseFloat(v.amount) || 0; done('Ingreso guardado'); }
   else if (k === 'newcat') { S.categories.push({ id: 'c' + uid(), name: v.name.trim(), icon: v.icon, color: v.color }); done('Categoría agregada'); }
   else if (k === 'newgoal') { S.goals.push({ id: uid(), name: v.name.trim(), target: parseFloat(v.target), deadline: v.deadline, start: iso(today()), startSaved: parseFloat(v.start) || 0, contribs: [] }); closeSheet(); done('Meta creada'); }
   else if (k === 'contrib') { const g = S.goals.find(x => x.id === e.target.dataset.gid), inn = e.target.dataset.mode === 'in', a = parseFloat(v.amount); if (!(a > 0)) return;

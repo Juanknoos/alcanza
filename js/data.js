@@ -1,6 +1,6 @@
 /* ===== DATOS (capa intercambiable: fase 2 → GoogleSheetsService) ===== */
 const DEFAULT_CATS = () => [['Comida','restaurant','#e8590c'],['Mercado','shopping_cart','#2f9e44'],['Transporte','directions_bus','#1c7ed6'],['Salud','favorite','#e03131'],['Hogar','home','#7048e8'],['Ocio','sports_esports','#f08c00'],['Ropa','checkroom','#d6336c'],['Otros','more_horiz','#868e96']].map(([name, icon, color], i) => ({ id: 'c' + (i + 1), name, icon, color }));
-const DEFAULT_STATE = () => ({ updatedAt: 0, categories: DEFAULT_CATS(), transactions: [], goals: [], notes: [], reminders: { on: true, time: '09:00', before: true, same: true }, balance: 0, income: { amount: 0, weekday: 5 }, templates: [], payments: [] });
+const DEFAULT_STATE = () => ({ updatedAt: 0, categories: DEFAULT_CATS(), transactions: [], goals: [], notes: [], reminders: { on: true, time: '09:00', before: true, same: true }, balance: 0, income: { amount: 0, weekday: 5, mode: 'fixed', daily: 0, usual: 6, lastPaid: '' }, worked: {}, templates: [], payments: [] });
 const LocalStorageService = {
   KEY: 'finanzas-v1',
   async load() { try { const r = localStorage.getItem(this.KEY); if (r) return { ...DEFAULT_STATE(), ...JSON.parse(r) }; } catch (e) { console.warn(e); } return DEFAULT_STATE(); },

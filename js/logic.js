@@ -48,3 +48,22 @@ function goalInfo(g) { // progreso, cuota semanal sugerida y ritmo ideal (línea
 /* ===== CUOTAS ===== */
 const tplPaid = (S, x) => S.payments.filter(p => p.templateId === x.id && p.status === 'paid').length;
 const tplDone = (S, x) => x.installments > 0 && tplPaid(S, x) >= x.installments;
+
+/* ===== INGRESO: monto fijo semanal o valor por día trabajado ===== */
+const isDaily = S => S.income.mode === 'daily';
+const incomeOn = S => isDaily(S) ? S.income.daily > 0 : S.income.amount > 0;
+const weeklyIncome = S => isDaily(S) ? (S.income.daily || 0) * (S.income.usual || 0) : S.income.amount;
+const payEnd = (S, d) => { let x = d; while (x.getDay() !== S.income.weekday) x = add(x, 1); return x; };      // día de cobro del periodo que contiene d
+const lastPayday = S => { let x = today(); while (x.getDay() !== S.income.weekday) x = add(x, -1); return x; };  // último día de cobro (hoy incluido)
+const periodDays = e => Array.from({ length: 7 }, (_, i) => add(e, i - 6));                                      // los 7 días que termina el cobro
+const workedIn = (S, e) => periodDays(e).filter(d => S.worked[iso(d)]).length;
+const dailyPay = (S, e) => workedIn(S, e) * (S.income.daily || 0);
+function claimable(S) { // pago ya cumplido y aún no registrado
+  if (!isDaily(S)) return null; const e = lastPayday(S), amount = dailyPay(S, e);
+  return iso(e) > (S.income.lastPaid || '') && amount > 0 ? { end: e, days: workedIn(S, e), amount } : null;
+}
+function incomeAt(S, e) { // ingreso esperado para el día de cobro e (para la proyección)
+  if (!isDaily(S)) return S.income.amount;
+  const t = today(), cur = e >= t && add(e, -6) <= t, marked = workedIn(S, e), usual = S.income.usual || 0;
+  return (cur && e > t ? Math.max(marked, usual) : cur ? marked : usual) * (S.income.daily || 0);
+}
